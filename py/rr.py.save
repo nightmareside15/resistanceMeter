@@ -1,0 +1,90 @@
+import OPi.GPIO as GPIO
+import time
+import serial
+from RPLCD.i2c import CharLCD 
+
+
+#SETUP
+GPIO.setmode(GPIO.SUNXI)
+GPIO.setwarnings(False)
+GPIO.setup("PI1", GPIO.OUT)
+GPIO.setup("PH7", GPIO.IN)
+
+lcd = CharLCD(i2c_expander='PCF8574',
+        address = 0x27,
+        port=3,
+        cols=16, rows=2)
+
+
+
+
+def open_serial():
+    while True:
+        try:
+            ser = serial.Serial(
+                port="/dev/ttyUSB0",
+                baudrate=9600,
+                bytesize=serial.EIGHTBITS,
+                parity=serial.PARITY_NONE,
+                stopbits=serial.STOPBITS_ONE,
+                timeout=1,
+                writeTimeout=2
+            )
+            if ser.is_open:
+                lcd.clear()
+                lcd.write_string('  CONNECTED  ')
+                print("Serial connected")
+                lcd.clear();
+                return ser
+        except serial.SerialException as e:
+            lcd.clear();
+            lcd.cursor_pos = (0,0);
+            lcd.write_string('WAITING FOR USB')
+            lcd.cursor_pos = (1, 0);
+            lcd.write_string(' ==>>*****<<==')
+
+            print(f"Waiting for serial: {e}")
+            time.sleep(2)
+
+# Open the first time
+ser = open_serial()
+
+try:
+    while True:
+        try:
+            lcd.cursor_pos = (0, 0);
+            lcd.write_string("   RESISTANCE   ")
+            lcd.cursor_pos = (1, 0);
+	
+            if GPIO.input("PH7") == GPIO.LOW:
+                print("Detected HIGH signal")
+                # Main task
+                ser.write(b'hello')
+                print("Sent data")
+                GPIO.output("PI1", GPIO.HIGH)
+                print("GPIO ON")
+                time.sleep(1)
+                GPIO.output("PI1", GPIO.LOW)
+                print("GPIO OFF")
+                time.sleep(1)
+            else:
+                print("Waiting for HIGH...")
+                time.sleep(0.2)
+
+        except (serial.SerialException, OSError) as e:
+            print(f"[!] Serial disconnected: {e}")
+            try:
+                ser.close()
+            except:
+                pass
+            ser = open_serial()  # Reconnect automatically
+
+except KeyboardInterrupt:
+    print("Interrupted by user")
+
+finally:
+    if ser.is_open:
+        ser.close()
+    GPIO.cleanup()
+
+
